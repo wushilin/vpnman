@@ -404,6 +404,15 @@ async fn main() {
         .route("/vpnman/api/profiles/{id}", get(api_get_profile))
         .route("/vpnman/api/openapi.json", get(openapi_json))
         .route("/vpnman/api/swagger", get(swagger_explorer))
+        .route("/vpnman/api/swagger-ui/swagger-ui.css", get(swagger_ui_css))
+        .route(
+            "/vpnman/api/swagger-ui/swagger-ui-bundle.js",
+            get(swagger_ui_bundle_js),
+        )
+        .route(
+            "/vpnman/api/swagger-ui/swagger-ui-standalone-preset.js",
+            get(swagger_ui_standalone_preset_js),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             security_middleware,
@@ -1293,9 +1302,10 @@ async fn profiles_index(State(state): State<AppState>) -> Html<String> {
         .iter()
         .map(|(id, meta)| {
             format!(
-                r#"<tr><td><a href="/vpnman/profiles/{}">{}</a></td><td>{}</td><td>{}</td><td title="{}">{}</td><td><a class="button small" href="/vpnman/profiles/{}/download">Download</a> <form class="inline js-confirm-delete" method="post" action="/vpnman/profiles/{}/delete" data-confirm="Delete this OpenVPN config?"><button class="button danger small" type="submit">Delete</button></form></td></tr>"#,
+                r#"<tr><td><a href="/vpnman/profiles/{}">{}</a></td><td>{}</td><td>{}</td><td>{}</td><td title="{}">{}</td><td><a class="button small" href="/vpnman/profiles/{}/download">Download</a> <form class="inline js-confirm-delete" method="post" action="/vpnman/profiles/{}/delete" data-confirm="Delete this OpenVPN config?"><button class="button danger small" type="submit">Delete</button></form></td></tr>"#,
                 esc(id),
                 esc(&meta.client_name),
+                esc(&meta.template_name),
                 esc(&meta.ca_common_name),
                 render_parameter_chips(&meta.variables),
                 esc(&days_ago_title(meta.created_at)),
@@ -1308,7 +1318,7 @@ async fn profiles_index(State(state): State<AppState>) -> Html<String> {
     page(
         "OpenVPN Configs",
         &format!(
-            r#"<section class="toolbar"><a class="button primary" href="/vpnman/generate">New</a></section><table class="configs-table"><thead><tr><th>Client</th><th>CA</th><th>Parameters</th><th>Created</th><th></th></tr></thead><tbody>{}</tbody></table>"#,
+            r#"<section class="toolbar"><a class="button primary" href="/vpnman/generate">New</a></section><table class="configs-table"><thead><tr><th>Client</th><th>Template</th><th>CA</th><th>Parameters</th><th>Created</th><th></th></tr></thead><tbody>{}</tbody></table>"#,
             rows
         ),
     )
@@ -1543,12 +1553,12 @@ async fn swagger_explorer() -> Html<String> {
     page(
         "Swagger Explorer",
         r#"
-        <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+        <link rel="stylesheet" href="/vpnman/api/swagger-ui/swagger-ui.css">
         <section class="panel swagger-panel">
           <div id="swagger-ui"></div>
         </section>
-        <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-        <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+        <script src="/vpnman/api/swagger-ui/swagger-ui-bundle.js"></script>
+        <script src="/vpnman/api/swagger-ui/swagger-ui-standalone-preset.js"></script>
         <script>
           window.addEventListener('load', () => {
             window.ui = SwaggerUIBundle({
@@ -1568,6 +1578,33 @@ async fn swagger_explorer() -> Html<String> {
           });
         </script>
         "#,
+    )
+}
+
+async fn swagger_ui_css() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        include_str!("swagger_ui/swagger-ui.css"),
+    )
+}
+
+async fn swagger_ui_bundle_js() -> impl IntoResponse {
+    (
+        [(
+            header::CONTENT_TYPE,
+            "application/javascript; charset=utf-8",
+        )],
+        include_str!("swagger_ui/swagger-ui-bundle.js"),
+    )
+}
+
+async fn swagger_ui_standalone_preset_js() -> impl IntoResponse {
+    (
+        [(
+            header::CONTENT_TYPE,
+            "application/javascript; charset=utf-8",
+        )],
+        include_str!("swagger_ui/swagger-ui-standalone-preset.js"),
     )
 }
 

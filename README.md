@@ -14,6 +14,7 @@ VPN Manager is a small Rust web application for generating self-contained OpenVP
 - Use the same functionality through JSON APIs under `/vpnman/api`.
 - Optional HTTP Basic Authentication.
 - Reverse-proxy friendly base path under `/vpnman/`.
+- Static UI assets, including Swagger UI, are vendored and embedded into the compiled binary.
 
 ## Configuration
 
@@ -97,6 +98,7 @@ Endpoints:
 - `GET /vpnman/api/profiles/{id}`
 - `GET /vpnman/api/openapi.json`
 - `GET /vpnman/api/swagger`
+- `GET /vpnman/api/swagger-ui/...` embedded Swagger UI assets
 
 Example issue request:
 
