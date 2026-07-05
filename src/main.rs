@@ -1403,20 +1403,53 @@ async fn download_profile(
     if !valid_storage_id(&id) {
         return error_page("Invalid Profile ID", "profile ID is not valid").into_response();
     }
-    let path = profiles_dir(&state.root).join(&id).join("profile.ovpn");
-    match fs::read(path) {
+    let dir = profiles_dir(&state.root).join(&id);
+    let filename = read_yaml::<ProfileMetadata>(&dir.join("metadata.yaml"))
+        .map(|meta| download_filename(&meta))
+        .unwrap_or_else(|_| "profile.ovpn".to_string());
+    match fs::read(dir.join("profile.ovpn")) {
         Ok(bytes) => (
             [
-                (header::CONTENT_TYPE, "application/x-openvpn-profile"),
+                (
+                    header::CONTENT_TYPE,
+                    "application/x-openvpn-profile".to_string(),
+                ),
                 (
                     header::CONTENT_DISPOSITION,
-                    "attachment; filename=\"profile.ovpn\"",
+                    format!("attachment; filename=\"{filename}\""),
                 ),
             ],
             bytes,
         )
             .into_response(),
         Err(err) => error_page("Profile Not Found", err).into_response(),
+    }
+}
+
+/// Build the suggested download filename as `<client>-<profile>.ovpn`, restricted
+/// to filesystem- and header-safe ASCII characters.
+fn download_filename(meta: &ProfileMetadata) -> String {
+    let client = safe_filename_part(&meta.client_name);
+    let profile = safe_filename_part(&meta.template_name);
+    format!("{client}-{profile}.ovpn")
+}
+
+fn safe_filename_part(value: &str) -> String {
+    let cleaned = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let trimmed = cleaned.trim_matches(&['_', '.'][..]);
+    if trimmed.is_empty() {
+        "profile".to_string()
+    } else {
+        trimmed.to_string()
     }
 }
 
