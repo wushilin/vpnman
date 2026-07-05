@@ -548,6 +548,20 @@ async fn security_middleware(
                 .into_response();
         }
     }
+    if request_fails_csrf(&req) {
+        if is_api {
+            return api_error(
+                StatusCode::FORBIDDEN,
+                "csrf_rejected",
+                "unsafe request failed CSRF origin checks",
+            );
+        }
+        return (
+            StatusCode::FORBIDDEN,
+            "unsafe request failed CSRF origin checks",
+        )
+            .into_response();
+    }
     next.run(req).await
 }
 
@@ -561,6 +575,71 @@ fn request_has_crlf(req: &Request<Body>) -> bool {
 
 fn contains_crlf(value: &str) -> bool {
     value.contains('\r') || value.contains('\n')
+}
+
+fn request_fails_csrf(req: &Request<Body>) -> bool {
+    if !is_unsafe_method(req.method().as_str()) {
+        return false;
+    }
+    let expected_origin = request_origin(req);
+    if let Some(origin) = header_value(req, "origin") {
+        return !origin_matches(origin, expected_origin.as_deref());
+    }
+    if let Some(referer) = header_value(req, "referer") {
+        return !referer_matches(referer, expected_origin.as_deref());
+    }
+    if let Some(fetch_site) = header_value(req, "sec-fetch-site") {
+        return matches!(fetch_site, "cross-site" | "same-site");
+    }
+    false
+}
+
+fn is_unsafe_method(method: &str) -> bool {
+    matches!(method, "POST" | "PUT" | "PATCH" | "DELETE")
+}
+
+fn header_value<'a>(req: &'a Request<Body>, name: &str) -> Option<&'a str> {
+    req.headers().get(name)?.to_str().ok()
+}
+
+fn request_origin(req: &Request<Body>) -> Option<String> {
+    let scheme = header_value(req, "x-forwarded-proto")
+        .and_then(|value| value.split(',').next())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| forwarded_proto(header_value(req, "forwarded")?))
+        .unwrap_or("http");
+    let host = header_value(req, "x-forwarded-host")
+        .and_then(|value| value.split(',').next())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| header_value(req, "host"))?;
+    Some(format!("{scheme}://{host}"))
+}
+
+fn forwarded_proto(value: &str) -> Option<&str> {
+    value
+        .split(';')
+        .map(str::trim)
+        .find_map(|part| part.strip_prefix("proto="))
+        .map(|value| value.trim_matches('"'))
+        .filter(|value| !value.is_empty())
+}
+
+fn origin_matches(actual: &str, expected: Option<&str>) -> bool {
+    expected.is_some_and(|expected| actual.eq_ignore_ascii_case(expected))
+}
+
+fn referer_matches(actual: &str, expected: Option<&str>) -> bool {
+    expected.is_some_and(|expected| {
+        actual
+            .get(..expected.len())
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(expected))
+            && actual
+                .as_bytes()
+                .get(expected.len())
+                .is_none_or(|next| *next == b'/')
+    })
 }
 
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
